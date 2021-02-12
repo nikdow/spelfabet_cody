@@ -12,10 +12,10 @@ require_once plugin_dir_path ( __FILE__ ) . 'options.php';
 function spelfabet_cody_enqueue_scripts(){
     /*see otu-newsletter for examples*/
 }
-add_action( 'admin_enqueue_scripts', spelfabet_cody_enqueue_scripts() );
+add_action( 'admin_enqueue_scripts', 'spelfabet_cody_enqueue_scripts' );
 
 add_action( 'init', 'create_spelfabet_cody');
-function create_spelfabet_cody(){
+function create_spelfabet_cody(){ // copied from otu-newsletter plugin
     $labels = array(
         'name' => _x('word-CGT', 'post type general name'),
         'singular_name' => _x('Newsletter', 'post type singular name'),
