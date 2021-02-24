@@ -30,7 +30,9 @@ function spelfabet_cody_uploads(){
                 <li><input type="radio" name="csv_type" value="schema_pgc">Schema PGC</li>
                 <li><input type="radio" name="csv_type" value="schema_structure">Schema Structure</li>
                 <li><input type="radio" name="csv_type" value="schema_hfw">Schema HFW</li>
+                <li><input type="radio" name="csv_type" value="schema_levels">Schema Levels</li>
             </ul>
+            <P><input type="checkbox" name="delete"> Delete entries based on uploaded file, i.e. "undo"</P>
             <?php submit_button( "upload CSV file")?>
         </form>
         <table class="bordered">
@@ -60,6 +62,10 @@ function spelfabet_cody_uploads(){
             <tr>
                 <td>Schema High Frequency Words</td>
                 <td>level as integer, HFW</td>
+            </tr>
+            <tr>
+                <td>Schema Levels</td>
+                <td>level as integer, description of level</td>
             </tr>
         </table>
     </div>
@@ -97,13 +103,6 @@ function handle_upload()
          * schema if relevant
          */
         $schema = $_POST['schema'];
-        if ($schema) {
-            $schema_slug = 'schema_' . $schema;
-            $term = get_term_by('slug', $schema_slug, 'schema');
-            if (!$term) {
-                $term = wp_insert_term($schema_slug, 'schema');
-            }
-        }
         if (!$schema && 0 === stripos($post_type, 'schema')) {
             $error->add('noschema', "Must specify schema for this type of upload");
         }
@@ -121,6 +120,7 @@ function handle_upload()
         <?php
         return;
     }
+    $delete = !! $_POST['delete'];
     /*
      * read the file
      */
@@ -128,72 +128,81 @@ function handle_upload()
     $headings = fgetcsv($handle); // discarded
     $lines_read = 0;
     while ($fields = fgetcsv($handle)) {
-        $lines_read++;
         if( Count($fields) < 2) continue;
+        if( trim($fields[0]) === "" ) continue;
+        if( trim($fields[1]) === "" ) continue;
         switch ($post_type) {
             case "word_pgc":
-                $word = $fields[0];
-                $pgc = $fields[1];
-                $posts = get_posts(['numberposts' => 10, 'post_type' => $post_type, 'exact' => true, 'title' => $word]);
-                $post_filtered = array_filter($posts, function ($post) use ($pgc) {
-                    return strtolower($post->post_excerpt) === strtolower($pgc);
-                });
-                if (count($post_filtered) === 1) { // exists, so ignore
-                    continue;
-                }
-                $post = ['post_title' => $word, 'post_excerpt' => $pgc, 'post_type' => $post_type, 'post_status' => 'publish'];
-                wp_insert_post($post, false, false);
-                break;
             case "word_structure":
                 $word = $fields[0];
-                $structure = $fields[1];
-                $posts = get_posts(['numberposts' => 1, 'post_type' => $post_type, 'exact' => true, 'title' => $word]);
-                if (count($posts) === 1) { // existing post, update
-                    $post = $posts[0];
-                    $post->post_excerpt = $structure;
-                    wp_update_post($post);
-                } else { // new post, create
-                    $post = ['post_title' => $word, 'post_excerpt' => $structure, 'post_type' => $post_type, 'post_status' => 'publish'];
-                    wp_insert_post($post, false, false);
+                $payload = $fields[1];
+                switch ( $post_type ){
+                    case "word_pgc":
+                        $posts = get_posts(['numberposts' => 10, 'post_type' => $post_type, 'exact' => true, 'title' => $word]);
+                        $post_filtered = array_filter($posts, function ($post) use ($payload) {
+                            return strtolower($post->post_excerpt) === strtolower($payload);
+                        });
+                        if( $delete && count($post_filtered) > 0 ){
+                            $lines_read++;
+                            foreach( $post_filtered as $post ){
+                                wp_delete_post( $post->ID, true );
+                            }
+                            continue 2;
+                        } else {
+                            if (count($post_filtered) === 1) { // exists, so ignore
+                                continue 2;
+                            }
+                        }
+                        break;
+                    case "word_structure":
+                        $posts = get_posts(['numberposts' => 1, 'post_type' => $post_type, 'exact' => true, 'title' => $word]);
+                        if (count($posts) === 1) { // existing post, update
+                            $lines_read++;
+                            if( $delete ){
+                                wp_delete_post( $posts[0]->ID, true );
+                                continue 2;
+                            }
+                            $post = $posts[0];
+                            $post->post_excerpt = $payload;
+                            wp_update_post($post);
+                            continue 2;
+                        }
+                        break;
                 }
+                $post = ['post_title' => $word, 'post_excerpt' => $payload, 'post_type' => $post_type, 'post_status' => 'publish'];
+                wp_insert_post($post, false, false);
+                $lines_read++;
                 break;
             case "schema_pgc":
-                $level = $fields[0];
-                $pgc = $fields[1];
-                $posts = get_posts(['numberposts' => 100, 'post_type' => $post_type, 'exact' => true, 'title' => $level]);
-                $post_filtered = array_filter($posts, function ($post) use ($pgc, $schema) {
-                    return strtolower($post->post_excerpt) === strtolower($pgc) && in_array($schema, $post->post_category);
-                });
-                if (count($post_filtered) === 1) continue;
-                $post = ['post_title' => $level, 'post_excerpt' => $pgc, 'post_type' => $post_type, 'post_status' => 'publish', 'tax_input' => ['schema' => $schema]];
-                wp_insert_post($post, false, false);
-                break;
             case "schema_structure":
-                $level = $fields[0];
-                $structure = $fields[1];
-                $posts = get_posts(['numberposts'=>100, 'post_type' => $post_type, 'exact' => true, 'title' => $level]);
-                $post_filtered = array_filter($posts, function($post) use($structure, $schema ){
-                    return strtolower($post->post_excerpt) === strtolower($structure) && in_array($schema, $post->post_category);
-                });
-                if( count($post_filtered) === 1 ) continue;
-                $post = ['post_title'=>$level, 'post_excerpt' => $structure, 'post_type' => $post_type, 'post_status' => 'publish', 'tax_input' => ['schema' => $schema]];
-                wp_insert_post( $post, false, false);
-                break;
             case "schema_hfw":
+            case "schema_levels":
                 $level = $fields[0];
-                $word = $fields[1];
-                $posts = get_posts(['numberposts'=>100, 'post_type' => $post_type, 'exact' => true, 'title' => $level]);
-                $post_filtered = array_filter($posts, function($post) use($structure, $schema ){
-                    return strtolower($post->post_excerpt) === strtolower($structure) && in_array($schema, $post->post_category);
+                $payload = $fields[1];
+                $posts = get_posts(['numberposts' => 100, 'post_type' => $post_type, 'exact' => true, 'title' => $level]);
+                $post_filtered = array_filter($posts, function ($post) use ($payload, $schema) {
+                    $term = get_the_terms( $post, 'schema');
+                    return strtolower($post->post_excerpt) === strtolower($payload) && $schema === $term[0]->name ;
                 });
-                if( count($post_filtered) === 1 ) continue;
-                $post = ['post_title'=>$level, 'post_excerpt' => $word, 'post_type' => $post_type, 'post_status' => 'publish', 'tax_input' => ['schema' => $schema]];
-                wp_insert_post( $post, false, false);
+                if (count($post_filtered) === 1) {
+                    if( $delete ) {
+                        $lines_read++;
+                        foreach ( $post_filtered as $post ) { // index although numeric may not start at 0
+                            wp_delete_post($post->ID, true);
+                        }
+                    }
+                    continue;
+                }
+                if( ! $delete ) {
+                    $post = ['post_title' => $level, 'post_excerpt' => $payload, 'post_type' => $post_type, 'post_status' => 'publish', 'tax_input' => ['schema' => $schema]];
+                    wp_insert_post($post, false, false);
+                    $lines_read++;
+                }
                 break;
         }
     }
     ?>
-    <h2>Successfully uploaded <?=$lines_read?> rows</h2>
+    <h2>Successfully <?=$delete ? 'deleted' : 'uploaded'?> <?=$lines_read?> rows</h2>
     <a href="/wp-admin/edit.php?post_type=<?=$post_type . ($schema ? "&schema=" . str_replace(" ", "-", $schema) : "")?>&filter_action=Filter&paged=1">View your upload</a>
     <?php
 }

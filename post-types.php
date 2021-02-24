@@ -207,10 +207,12 @@ function schema_pgc_edit_columns($columns) {
     $columns = array(
         "cb" => '<input type="checkbox" />',
         "title" => "Teaching Level",
-        "excerpt" => "Phoneme Grapheme correspondence"
+        "excerpt" => "Phoneme Grapheme correspondence",
+        "schema" => 'Schema'
     );
     return $columns;
 }
+add_action( 'manage_schema_pgc_posts_custom_column', 'add_column', 10, 2);
 /*
  * schema-structure
  */
@@ -263,10 +265,12 @@ function schema_structure_edit_columns($columns) {
     $columns = array(
         "cb" => '<input type="checkbox" />',
         "title" => "Teaching Level",
-        "excerpt" => "Syllable Structure"
+        "excerpt" => "Syllable Structure",
+        "schema" => 'Schema'
     );
     return $columns;
 }
+add_action( 'manage_schema_structure_posts_custom_column', 'add_column', 10, 2);
 /*
  * schema-hfw
  */
@@ -319,7 +323,78 @@ function schema_hfw_edit_columns($columns) {
     $columns = array(
         "cb" => '<input type="checkbox" />',
         "title" => "Teaching Level",
-        "excerpt" => "High Frequency Word"
+        "excerpt" => "High Frequency Word",
+        "schema" => 'Schema'
     );
     return $columns;
+}
+add_action( 'manage_schema_hfw_posts_custom_column', 'add_column', 10, 2);
+/*
+ * schema-levels
+ */
+$labels = array(
+    'name' => _x('Schema Level Descriptions', 'post type general name'),
+    'singular_name' => _x('Schema Levels', 'post type singular name'),
+    'add_new' => _x('Add New', 'schema HFW'),
+    'add_new_item' => __('Add New Schema Level Description'),
+    'edit_item' => __('Edit Schema Level Description'),
+    'new_item' => __('New Schema Description'),
+    'view_item' => __('View Schema Description'),
+    'search_items' => __('Search Schema Description'),
+    'not_found' =>  __('No Schema Descriptions found'),
+    'not_found_in_trash' => __('No Schema Descriptions found in Trash'),
+    'parent_item_colon' => '',
+);
+register_post_type( 'schema_levels',
+    array(
+        'label'=>__('Schema Level Descriptions'),
+        'labels' => $labels,
+        'description' => 'Each post is one Schema Descriptions.',
+        'public' => true,
+        'exclude_from_search' => true,
+        'taxonomies' => [ 'schema' ],
+        'has_archive' => false,
+        'show_ui' => true,
+        'capabilities' =>array(
+            'edit_post'=>'publish_posts',
+            'edit_posts'=>'publish_posts',
+            'edit_others_posts'=>'publish_posts',
+            'publish_posts'=>'publish_posts',
+            'delete_post' =>'publish_posts',
+            'delete_published_posts' => 'publish_posts',
+            'delete_posts' => 'publish_posts',
+            'can_export' => false,
+            'query_var' => false,
+        ),
+        'menu_icon' => "dashicons-controls-repeat",
+        'hierarchical' => false,
+        'rewrite' => false,
+        'supports'=> array('title', 'excerpt' ),
+        'show_in_menu' => false,
+        'show_in_nav_menus' => false,
+        'can_export' => false,
+        'query_var' => false,
+    )
+);
+add_filter ( "manage_edit-schema_levels_columns", "schema_levels_edit_columns" );
+function schema_levels_edit_columns($columns) {
+    $columns = array(
+        "cb" => '<input type="checkbox" />',
+        "title" => "Teaching Level",
+        "excerpt" => "Description",
+        "schema" => 'Schema'
+    );
+    return $columns;
+}
+add_action( 'manage_schema_levels_posts_custom_column', 'add_column', 10, 2);
+/*
+ * used in all schema post types:
+ */
+function add_column( $column, $post_id ){
+    if( $column === "schema" ){
+        $terms = get_the_terms( $post_id, 'schema' );
+        if( ! empty( $terms ) ){
+            echo( $terms[0]->name );
+        }
+    }
 }
